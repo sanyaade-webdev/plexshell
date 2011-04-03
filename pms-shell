@@ -1,0 +1,286 @@
+#!/usr/bin/env python
+
+from cmd import Cmd
+from httplib import HTTPConnection, MOVED_PERMANENTLY, OK
+from lxml import etree
+import argparse
+
+
+class Colors:
+    Blue = '\033[94m'
+    Green = '\033[92m'
+    Red = '\033[91m'
+    EndC = '\033[0m'
+
+
+def colorize(string, color):
+    return color + string + Colors.EndC
+
+
+class Track(object):
+    def __init__(self, name, path):
+        self.name = name
+        self.path = path
+
+    def __str__(self):
+        return self.name
+
+
+class Directory(object):
+    def __init__(self, name = "/", path = "", parent = None,
+                 display_name = None):
+        self.name = name
+        self.path = path
+        self.parent = parent
+        self._display_name = display_name
+
+    def __str__(self):
+        return colorize(self.display_name, Colors.Blue)
+
+    def is_root(self):
+        return self.name == "/"
+
+    def is_parent_dir(self):
+        return self.display_name == ".."
+
+    @property
+    def display_name(self):
+        return self._display_name or self.name
+
+
+class Plugin(object):
+    def __init__(self, identifier):
+        self.identifier = identifier
+
+    def __str__(self):
+        return self.identifier
+
+
+def parse_directory_response(response, directory):
+    result = list()
+    path = directory.path if directory else ""
+    if not directory.is_root():
+        parent = Directory(directory.name, path, directory.parent, "..")
+        result.append(parent)
+    listing = etree.fromstring(response)
+    for dir_node in listing.findall(".//Directory"):
+        name = (dir_node.get("name", None)
+                or dir_node.get('title')).encode("utf8")
+        key = dir_node.get('key').encode("utf8")
+        dir_path = key if key.startswith("/") else "%s/%s" % (path, key)
+        result.append(Directory(name, dir_path, directory))
+    for track_node in listing.findall(".//Track"):
+        name = track_node.get("title", None)
+        path = track_node.find(".//Media/Part").get("key")
+        result.append(Track(name, path))
+    return result
+
+
+def parse_plugins_response(response):
+    result = list()
+    listing = etree.fromstring(response)
+    for plugin_node in listing.findall(".//Plugin"):
+        identifier = plugin_node.get("identifier")
+        result.append(Plugin(identifier))
+    return result
+
+
+def parse_address(address, connection):
+    if not address.startswith("http://"):
+        return connection.host, connection.port, address
+    address = address.replace("http://", "")
+    host, port = address.split("/")[0].split(":")
+    return host, port, address.replace("%s:%s" % (host, port), "")
+
+
+def get(conn, path, error_msg):
+    conn.request("GET", path)
+    response = conn.getresponse()
+    if response.status == MOVED_PERMANENTLY:
+        location = response.getheader("location")
+        print "redirected: %s" % location
+        host, port, address = parse_address(location, conn)
+        conn = HTTPConnection(host, port)
+        return get(conn, address, error_msg)
+    elif not response.status == OK:
+        if error_msg:
+            print "%s: %s" % (error_msg, response.reason)
+        return None
+    return response.read()
+
+
+def get_directory(conn, directory, error_msg = None, parse = True):
+    response = get(conn, directory.path, error_msg)
+    if not response:
+        return None
+    return parse_directory_response(
+        response, directory) if parse else response
+
+
+def get_plugins(conn, error_msg = None):
+    response = get(conn, "/:/plugins/", error_msg)
+    if not response:
+        return None
+    return parse_plugins_response(response)
+
+
+def restart_plugin(conn, plugin):
+    print "Restarting plugin: %s" % plugin
+    url = "/:/plugins/%s/restart" % plugin
+    if get(conn, url, "Failed to restart plugin: ") is not None:
+        print "Restart succeeded"
+
+
+class PMSClient(Cmd):
+    ''' The command line interpretter '''
+
+    def __init__(self, host, port):
+        Cmd.__init__(self)
+        self.host = host
+        self.port = port
+        self.conn = HTTPConnection(self.host, self.port)
+        self.update_prompt()
+
+    def get_cwd(self):
+        return getattr(self, "_cwd", Directory())
+
+    def set_cwd(self, cwd):
+        setattr(self, "_cwd", cwd)
+        self.update_prompt()
+
+    def get_node(self, directory, klass, matcher):
+        directory = directory if directory else self.cwd
+        for node in get_directory(self.conn, directory):
+            if not isinstance(node, klass):
+                continue
+            if matcher(node):
+                return node
+
+    def get_track(self, name, cwd = None):
+        matcher = lambda n: n.name == name
+        return self.get_node(cwd, Track, matcher)
+
+    def get_directory(self, name, cwd = None):
+        matcher = lambda n: (n.display_name or n.name) == name
+        subdir = self.get_node(cwd, Directory, matcher)
+        if subdir:
+            if subdir.is_parent_dir():
+                return subdir.parent
+            return subdir
+
+    def update_prompt(self):
+        prompt = "%s:%s %s > " % (
+            self.host, self.port, self.cwd)
+        self.prompt = colorize(prompt, Colors.Green)
+
+    def can_exit(self):
+        return True
+
+    def help_ls(self):
+        print 'List directory contents (defaults to current dir)'
+
+    def help_help(self):
+        print 'Print command specific help'
+
+    def do_plugins(self, s):
+        plugins = get_plugins(self.conn, "Couldn't retrieve plugin list")
+        for plugin in plugins:
+            print plugin
+
+    def complete_restart(self, text, line, begidx, endidx):
+        plugins = get_plugins(self.conn)
+        return [p.identifier for p in plugins if p.identifier.startswith(text)]
+
+    def do_restart(self, plugin_identifier):
+        plugins = get_plugins(self.conn, "Couldn't retrieve plugin list")
+        for plugin in plugins:
+            if plugin.identifier == plugin_identifier:
+                restart_plugin(self.conn, plugin)
+
+    def do_ls(self, name):
+        directory = self.get_directory(name) if name else self.cwd
+        listing = get_directory(self.conn, directory, "Couldn't list directory")
+        for subdir in listing or []:
+            print subdir
+
+    def complete_cd(self, text, line, begidx, endidx):
+        components = line[3:].split("/")
+        cwd = self.cwd
+        for index, name in enumerate(components) or (0, ".."):
+            if index == len(components) - 1:
+                subdirs = get_directory(self.conn, cwd)
+                return [s.display_name for s in subdirs
+                        if s.display_name.startswith(text)
+                        and isinstance(s, Directory)]
+            cwd = self.get_directory(name, cwd)
+            if not cwd:
+                return []
+
+    def do_cd(self, name):
+        if not len(name) or name == "/":
+            self.set_cwd(Directory())
+            return
+        for name in name.split("/"):
+            if not name:
+                continue
+            directory = self.get_directory(name)
+            if directory:
+                if not get_directory(self.conn, directory):
+                    print "Directory not found"
+                else:
+                    self.set_cwd(directory)
+            else:
+                print "Invalid directory"
+
+    def do_pwd(self, s):
+        print self.cwd.path or "/"
+
+    def complete_get(self, text, line, begidx, endidx):
+        listing = get_directory(self.conn, self.cwd)
+        return [c.name for c in listing
+                if c.name.startswith(text)
+                and isinstance(c, Track)]
+
+    def do_get(self, name):
+        if not name:
+            print get_directory(self.conn, self.cwd, parse = False)
+            return
+        track = self.get_track(name)
+        if not track:
+            print "%s does not exist" % name
+            return
+        print "get: %s" % track
+        get(self.conn, track.path, "Failed to get track")
+
+    def do_exit(self, s):
+        return True
+
+    cwd = property(get_cwd, set_cwd)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description = "A interactive command line PMS client")
+    parser.add_argument(
+        "host",
+        metavar = "h",
+        nargs = "?",
+        default = "localhost")
+    parser.add_argument(
+        "port",
+        metavar = "p",
+        nargs = "?",
+        type = int,
+        default = 32400)
+    args = parser.parse_args()
+    client = PMSClient(args.host, args.port)
+    try:
+        client.cmdloop()
+    except KeyboardInterrupt:
+        print "Goodbye!"
+        exit(0)
+
+
+if __name__ == "__main__":
+    main()
+
