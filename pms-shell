@@ -3,6 +3,7 @@
 from cmd import Cmd
 from httplib import HTTPConnection, MOVED_PERMANENTLY, OK
 from lxml import etree
+from os import system
 import argparse
 
 
@@ -124,29 +125,63 @@ def get_plugins(conn, error_msg = None):
     return parse_plugins_response(response)
 
 
-def restart_plugin(conn, plugin):
-    print "Restarting plugin: %s" % plugin
-    url = "/:/plugins/%s/restart" % plugin
-    if get(conn, url, "Failed to restart plugin: ") is not None:
-        print "Restart succeeded"
+class ShellCmd(Cmd, object):
+
+    def help_shell(self):
+        print "Execute shell commands"
+
+    def help_clear(self):
+        print "Clear the screen"
+
+    def do_shell(self, s):
+        system(s)
+
+    def do_clear(self, s):
+        system("clear")
 
 
-class PMSClient(Cmd):
-    ''' The command line interpretter '''
+class ExitCmd(Cmd, object):
+    ''' Mixin that adds exit capabilities to the shell '''
 
-    def __init__(self, host, port):
-        Cmd.__init__(self)
-        self.host = host
-        self.port = port
-        self.conn = HTTPConnection(self.host, self.port)
+    def cmdloop(self, intro=None):
+        while True:
+            try:
+                return super(ExitCmd, self).cmdloop(intro)
+            except KeyboardInterrupt:
+                print "Goodbye!"
+                exit(1)
+
+    def do_exit(self, s):
+        return True
+
+    def help_exit(self):
+        print "Exit the interpreter."
+        print "You can also use the Ctrl-D shortcut."
+
+    do_EOF = do_exit
+    help_EOF = help_exit
+
+
+class PlexCmd(Cmd, object):
+    ''' Base class for plex commands '''
+
+    def __init__(self):
+        super(PlexCmd, self).__init__()
+        self.conn = None
+
+    def set_host(self, host, port):
+        self.conn = HTTPConnection(host, port)
         self.update_prompt()
 
-    def get_cwd(self):
-        return getattr(self, "_cwd", Directory())
-
-    def set_cwd(self, cwd):
-        setattr(self, "_cwd", cwd)
-        self.update_prompt()
+    def update_prompt(self):
+        context = getattr(self, "prompt_context", None)
+        if not self.conn:
+            prompt = "disconnected >"
+        elif context:
+            prompt = "%s:%s %s > " % (self.conn.host, self.conn.port, context)
+        else:
+            prompt = "%s:%s > " % (self.conn.host, self.conn.port)
+        self.prompt = colorize(prompt, Colors.Green)
 
     def get_node(self, directory, klass, matcher):
         directory = directory if directory else self.cwd
@@ -168,40 +203,65 @@ class PMSClient(Cmd):
                 return subdir.parent
             return subdir
 
-    def update_prompt(self):
-        prompt = "%s:%s %s > " % (
-            self.host, self.port, self.cwd)
-        self.prompt = colorize(prompt, Colors.Green)
 
-    def can_exit(self):
-        return True
+class PluginCmd(PlexCmd):
+    ''' Mixin that adds plugin related commands '''
 
-    def help_ls(self):
-        print 'List directory contents (defaults to current dir)'
+    def restart_plugin(self, plugin):
+        print "Restarting plugin: %s" % plugin
+        url = "/:/plugins/%s/restart" % plugin
+        if get(self.conn, url, "Failed to restart plugin: ") is not None:
+            print "Restart succeeded"
 
-    def help_help(self):
-        print 'Print command specific help'
+    def help_restart(self):
+        print 'Usage: restart plugin_identifier'
+        print 'Restart the plugin with the given identifier'
+
+    def help_plugins(self):
+        print 'List all installed plugins'
+
+    def complete_restart(self, text, line, begidx, endidx):
+        plugins = get_plugins(self.conn)
+        return [p.identifier for p in plugins if p.identifier.startswith(text)]
 
     def do_plugins(self, s):
         plugins = get_plugins(self.conn, "Couldn't retrieve plugin list")
         for plugin in plugins:
             print plugin
 
-    def complete_restart(self, text, line, begidx, endidx):
-        plugins = get_plugins(self.conn)
-        return [p.identifier for p in plugins if p.identifier.startswith(text)]
-
     def do_restart(self, plugin_identifier):
+        if not plugin_identifier:
+            return self.help_restart()
         plugins = get_plugins(self.conn, "Couldn't retrieve plugin list")
         for plugin in plugins:
             if plugin.identifier == plugin_identifier:
-                restart_plugin(self.conn, plugin)
+                return restart_plugin(self.conn, plugin)
+        print "Unknown plugin: %s" % plugin_identifier
 
-    def do_ls(self, name):
-        directory = self.get_directory(name) if name else self.cwd
-        listing = get_directory(self.conn, directory, "Couldn't list directory")
-        for subdir in listing or []:
-            print subdir
+
+class DirectoryCmd(PlexCmd):
+    ''' Plex directory related commands '''
+
+    def __init__(self):
+        super(DirectoryCmd, self).__init__()
+        self.set_cwd(Directory())
+
+    def get_cwd(self):
+        return getattr(self, "_cwd")
+
+    def set_cwd(self, cwd):
+        setattr(self, "_cwd", cwd)
+        self.prompt_context = cwd
+        self.update_prompt()
+
+    def help_cd(self):
+        print 'Change to a given directory'
+
+    def help_ls(self):
+        print 'List directory contents (defaults to current dir)'
+
+    def help_pwd(self):
+        print 'Print the path to the current directory'
 
     def complete_cd(self, text, line, begidx, endidx):
         components = line[3:].split("/")
@@ -215,6 +275,9 @@ class PMSClient(Cmd):
             cwd = self.get_directory(name, cwd)
             if not cwd:
                 return []
+
+    def do_pwd(self, s):
+        print self.cwd.path or "/"
 
     def do_cd(self, name):
         if not len(name) or name == "/":
@@ -232,8 +295,28 @@ class PMSClient(Cmd):
             else:
                 print "Invalid directory"
 
-    def do_pwd(self, s):
-        print self.cwd.path or "/"
+    def do_ls(self, name):
+        directory = self.get_directory(name) if name else self.cwd
+        listing = get_directory(self.conn, directory, "Couldn't list directory")
+        for subdir in listing or []:
+            print subdir
+
+    do_l = do_ls
+    cwd = property(get_cwd, set_cwd)
+
+
+class PlexShell(ExitCmd, ShellCmd, DirectoryCmd, PluginCmd):
+    ''' The command line interpretter '''
+
+    def __init__(self, host, port):
+        super(PlexShell, self).__init__()
+        self.set_host(host, port)
+
+    def help_help(self):
+        print 'Print command specific help'
+
+    def help_get(self):
+        print 'Get a resource'
 
     def complete_get(self, text, line, begidx, endidx):
         listing = get_directory(self.conn, self.cwd)
@@ -252,10 +335,6 @@ class PMSClient(Cmd):
         print "get: %s" % track
         get(self.conn, track.path, "Failed to get track")
 
-    def do_exit(self, s):
-        return True
-
-    cwd = property(get_cwd, set_cwd)
 
 
 def main():
@@ -273,12 +352,8 @@ def main():
         type = int,
         default = 32400)
     args = parser.parse_args()
-    client = PMSClient(args.host, args.port)
-    try:
-        client.cmdloop()
-    except KeyboardInterrupt:
-        print "Goodbye!"
-        exit(0)
+    client = PlexShell(args.host, args.port)
+    client.cmdloop()
 
 
 if __name__ == "__main__":
