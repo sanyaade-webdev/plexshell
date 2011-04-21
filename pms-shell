@@ -168,6 +168,14 @@ class PlexCmd(Cmd, object):
         self.prompt = colorize(prompt, Colors.Green)
 
 
+class UpdateCmd(PlexCmd):
+    ''' Mixin that adds allows the user to trigger the updating process '''
+
+    def do_update(self, s):
+        print "Updating plugins"
+        get(self.conn, "/system/appstore/updates/install", "Updating failed: ")
+
+
 class PluginCmd(PlexCmd):
     ''' Mixin that adds plugin related commands '''
 
@@ -333,7 +341,7 @@ class DirectoryCmd(PlexCmd):
     cwd = property(get_cwd, set_cwd)
 
 
-class PlexShell(ExitCmd, ShellCmd, DirectoryCmd, PluginCmd):
+class PlexShell(ExitCmd, ShellCmd, DirectoryCmd, UpdateCmd, PluginCmd):
     ''' The command line interpretter '''
 
     def __init__(self, host, port, stdin = None):
