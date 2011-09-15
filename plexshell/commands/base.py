@@ -1,6 +1,7 @@
 from cmd import Cmd
 from httplib import HTTPConnection
 from plexshell.utils import Colors, colorize
+import os
 import sys
 
 
