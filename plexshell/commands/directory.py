@@ -100,10 +100,11 @@ class DirectoryCmd(PlexCmd):
         if not directory:
             print "Invalid directory"
         elif directory.is_search_dir():
-            print "search dir"
+            print "NOT IMPLEMENTED: search command"
         elif not self.list_directory(directory):
             print "Directory not found: %s" % directory
-        self.cwd = directory
+        else:
+            self.cwd = directory
         return self.cwd.name == name
 
     def do_ls(self, name):

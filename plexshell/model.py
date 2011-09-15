@@ -58,7 +58,7 @@ class Directory(Node):
         return self.display_name == ".."
 
     def is_search_dir(self):
-        return False
+        return bool(self.node.get("search", 0))
 
     @property
     def path(self):
