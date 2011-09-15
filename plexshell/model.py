@@ -57,6 +57,9 @@ class Directory(Node):
     def is_parent_dir(self):
         return self.display_name == ".."
 
+    def is_search_dir(self):
+        return False
+
     @property
     def path(self):
         path = ""

@@ -37,10 +37,8 @@ class DirectoryCmd(PlexCmd):
 
     def list_directory(self, directory, error_msg = None, parse = True):
         response = get(self.conn, directory.path, error_msg)
-        if not response:
-            return None
         return self.parse_directory_response(
-            response, directory) if parse else response
+            response, directory) if response and parse else response
 
     def get_node(self, directory, klass, matcher):
         directory = directory if directory else self.cwd
@@ -92,16 +90,21 @@ class DirectoryCmd(PlexCmd):
             self.cwd = Directory()
             return
         for name in name.split("/"):
-            if not name:
-                continue
-            directory = self.get_directory(name)
-            if directory:
-                if not self.list_directory(directory):
-                    print "Directory not found: %s" % directory
-                else:
-                    self.cwd = directory
-            else:
-                print "Invalid directory"
+            if not self.cd_to_sibling(name):
+                return
+
+    def cd_to_sibling(self, name):
+        if not name:
+            return True
+        directory = self.get_directory(name)
+        if not directory:
+            print "Invalid directory"
+        elif directory.is_search_dir():
+            print "search dir"
+        elif not self.list_directory(directory):
+            print "Directory not found: %s" % directory
+        self.cwd = directory
+        return self.cwd.name == name
 
     def do_ls(self, name):
         directory = self.get_directory(name) if name else self.cwd
