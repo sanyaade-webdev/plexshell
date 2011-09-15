@@ -1,39 +1,39 @@
 from lxml import etree
 from plexshell.commands import PlexCmd
 from plexshell.model import Directory, Track, Artist
-from plexshell.utils import get
+from plexshell.utils import get, colorize
 
 
 class DirectoryCmd(PlexCmd):
     ''' Plex directory related commands '''
 
+    def __init__(self, *args, **kwargs):
+        super(DirectoryCmd, self).__init__(*args, **kwargs)
+        self.cwd = Directory()
+
     @classmethod
     def parse_directory_response(cls, response, directory):
         result = list()
-        path = directory.path if directory else ""
-        if not directory.is_root():
-            parent = Directory(directory.name, path, directory.parent, "..")
-            result.append(parent)
         listing = etree.fromstring(response)
-        for dir_node in listing.findall(".//Directory"):
-            name = (dir_node.get("name", None)
-                    or dir_node.get('title')).encode("utf8")
-            key = dir_node.get('key').encode("utf8")
-            dir_path = key if key.startswith("/") else "%s/%s" % (path, key)
-            result.append(Directory(name, dir_path, directory))
-        for track_node in listing.findall(".//Track"):
-            name = track_node.get("title", None)
-            track_path = track_node.find(".//Media/Part").get("key")
-            result.append(Track(name, track_path))
-        for artist_node in listing.findall(".//Artist"):
-            name = artist_node.get("artist", None).encode("utf8")
-            artist_path = "%s/%s" % (path, artist_node.get("key"))
-            result.append(Artist(name, artist_path))
+        if not directory.is_root():
+            result.append(Directory(directory.node, directory.parent, ".."))
+        for node in listing.findall(".//Directory"):
+            result.append(Directory(node, directory))
+        for node in listing.findall(".//Track"):
+            result.append(Track(node, directory))
+        for node in listing.findall(".//Artist"):
+            result.append(Artist(node, directory))
         return result
 
-    def __init__(self, *args, **kwargs):
-        super(DirectoryCmd, self).__init__(*args, **kwargs)
-        self.set_cwd(Directory())
+    @property
+    def cwd(self):
+        return self._cwd
+
+    @cwd.setter
+    def cwd(self, cwd):
+        self._cwd = cwd
+        self.prompt_context = colorize(cwd.display_path, cwd.color)
+        self.update_prompt()
 
     def list_directory(self, directory, error_msg = None, parse = True):
         response = get(self.conn, directory.path, error_msg)
@@ -62,14 +62,6 @@ class DirectoryCmd(PlexCmd):
                 return subdir.parent
             return subdir
 
-    def get_cwd(self):
-        return getattr(self, "_cwd")
-
-    def set_cwd(self, cwd):
-        setattr(self, "_cwd", cwd)
-        self.prompt_context = cwd
-        self.update_prompt()
-
     def help_cd(self):
         print 'Change to a given directory'
 
@@ -97,7 +89,7 @@ class DirectoryCmd(PlexCmd):
 
     def do_cd(self, name):
         if not len(name) or name == "/":
-            self.set_cwd(Directory())
+            self.cwd = Directory()
             return
         for name in name.split("/"):
             if not name:
@@ -105,9 +97,9 @@ class DirectoryCmd(PlexCmd):
             directory = self.get_directory(name)
             if directory:
                 if not self.list_directory(directory):
-                    print "Directory not found"
+                    print "Directory not found: %s" % directory
                 else:
-                    self.set_cwd(directory)
+                    self.cwd = directory
             else:
                 print "Invalid directory"
 
@@ -115,7 +107,6 @@ class DirectoryCmd(PlexCmd):
         directory = self.get_directory(name) if name else self.cwd
         listing = self.list_directory(directory, "Couldn't list directory")
         for subdir in listing or []:
-            print subdir
+            print colorize(subdir.display_name, subdir.color)
 
     do_l = do_ls
-    cwd = property(get_cwd, set_cwd)
