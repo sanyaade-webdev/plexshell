@@ -8,7 +8,7 @@ setup(
     author_email = 'jamie@plexinc.com',
     packages = find_packages(exclude = ["tests", "doc"]),
     install_requires = [
-        'lxml>=2.2.1',
+        'lxml'
     ],
     entry_points = {
         'console_scripts': [
