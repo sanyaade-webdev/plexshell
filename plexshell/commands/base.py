@@ -1,6 +1,6 @@
 from cmd import Cmd
 from httplib import HTTPConnection
-from pmshell.utils import Colors, colorize
+from plexshell.utils import Colors, colorize
 import sys
 
 

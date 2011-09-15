@@ -1,6 +1,6 @@
-from pmshell.commands import PlexCmd
-from pmshell.model import Setting
-from pmshell.utils import get, Colors, colorize
+from plexshell.commands import PlexCmd
+from plexshell.model import Setting
+from plexshell.utils import get, Colors, colorize
 from lxml import etree
 from urllib import quote
 

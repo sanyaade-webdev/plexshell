@@ -1,7 +1,7 @@
 from lxml import etree
-from pmshell.commands import PlexCmd
-from pmshell.model import Directory, Track, Artist
-from pmshell.utils import get
+from plexshell.commands import PlexCmd
+from plexshell.model import Directory, Track, Artist
+from plexshell.utils import get
 
 
 class DirectoryCmd(PlexCmd):

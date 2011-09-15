@@ -1,4 +1,4 @@
-from pmshell.commands import PlexCmd
+from plexshell.commands import PlexCmd
 
 class UpdateCmd(PlexCmd):
     ''' Mixin that provides a command to trigger the auto-updating process '''
