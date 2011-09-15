@@ -7,6 +7,8 @@ setup(
     author = 'Jamie Kirkpatrick',
     author_email = 'jamie@plexinc.com',
     packages = find_packages(exclude = ["tests", "doc"]),
+    url = 'https://github.com/jkp/plexshell',
+    download_url = 'https://github.com/jkp/plexshell/downloads',
     install_requires = [
         'lxml'
     ],
