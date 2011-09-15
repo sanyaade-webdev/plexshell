@@ -1,358 +1,23 @@
 #!/usr/bin/env python
-
-from cmd import Cmd
-from httplib import HTTPConnection, MOVED_PERMANENTLY, OK
-from lxml import etree
+from pmshell.commands import DirectoryCmd, PluginCmd, SettingsCmd, UpdateCmd
+from pmshell.model import Track, Artist, Directory, Plugin, Setting
+from pmshell.utils import Colors, colorize, parse_address, chunked_read, get
 import argparse
 import os
-import sys
 
 
-def colorize(string, color):
-    return color + string + Colors.EndC
-
-
-def parse_address(address, connection):
-    if not address.startswith("http://"):
-        return connection.host, connection.port, address
-    address = address.replace("http://", "")
-    host, port = address.split("/")[0].split(":")
-    return host, port, address.replace("%s:%s" % (host, port), "")
-
-
-def chunked_read(response, chunk_size = 4096, progress = False):
-    result = ""
-    bytes_read = 0
-    while True:
-        chunk = response.read(chunk_size)
-        bytes_read += len(chunk)
-        result += chunk
-        if progress:
-            sys.stdout.write("\rread: %s bytes" % bytes_read)
-            sys.stdout.flush()
-        if not chunk:
-            break
-    return result
-
-
-def get(conn, path, error_msg, progress = False):
-    conn.request("GET", path)
-    response = conn.getresponse()
-    if response.status == MOVED_PERMANENTLY:
-        location = response.getheader("location")
-        print "redirected: %s" % location
-        host, port, address = parse_address(location, conn)
-        conn = HTTPConnection(host, port)
-        return get(conn, address, error_msg, progress = progress)
-    elif not response.status == OK:
-        if error_msg:
-            print "%s: %s" % (error_msg, response.reason)
-        return None
-    return chunked_read(response, progress = progress)
-
-
-class Colors:
-    Blue = '\033[94m'
-    Green = '\033[92m'
-    Red = '\033[91m'
-    EndC = '\033[0m'
-
-
-class Node(object):
-    def __init__(self, name, path):
-        self.name = name
-        self.path = path
-
-
-class Track(Node):
-    def __str__(self):
-        return self.name
-
-
-class Artist(Node):
-    def __str__(self):
-        return self.name
-
-
-class Directory(Node):
-    def __init__(self, name = "/", path = "", parent = None,
-                 display_name = None):
-        super(Directory, self).__init__(name, path)
-        self.parent = parent
-        self._display_name = display_name
-
-    def __str__(self):
-        return colorize(self.display_name, Colors.Blue)
-
-    def is_root(self):
-        return self.name == "/"
-
-    def is_parent_dir(self):
-        return self.display_name == ".."
-
-    @property
-    def display_name(self):
-        return self._display_name or self.name
-
-
-class Plugin(object):
-    def __init__(self, identifier):
-        self.identifier = identifier
-
-    def __str__(self):
-        return self.identifier
-
-
-class ShellCmd(Cmd, object):
-
-    def help_shell(self):
-        print "Execute shell commands"
-
-    def help_clear(self):
-        print "Clear the screen"
-
-    def do_shell(self, s):
-        os.system(s)
-
-    def do_clear(self, s):
-        os.system("clear")
-
-
-class ExitCmd(Cmd, object):
-    ''' Mixin that adds exit capabilities to the shell '''
-
-    def cmdloop(self, intro=None):
-        while True:
-            try:
-                return super(ExitCmd, self).cmdloop(intro)
-            except KeyboardInterrupt:
-                print "Goodbye!"
-                exit(1)
-
-    def do_exit(self, s):
-        return True
-
-    def help_exit(self):
-        print "Exit the interpreter."
-        print "You can also use the Ctrl-D shortcut."
-
-    do_EOF = do_exit
-    help_EOF = help_exit
-
-
-class PlexCmd(Cmd, object):
-    ''' Base class for plex commands '''
-
-    def __init__(self, *args, **kwargs):
-        if kwargs.get('stdin', None):
-            setattr(self, "interactive", False)
-            self.use_rawinput = False
-        super(PlexCmd, self).__init__(*args, **kwargs)
-        self.conn = None
-
-    def set_host(self, host, port):
-        self.conn = HTTPConnection(host, port)
-        self.update_prompt()
-
-    def update_prompt(self):
-        context = getattr(self, "prompt_context", None)
-        interactive = getattr(self, "interactive", True)
-        if not interactive:
-            prompt = ''
-        elif not self.conn:
-            prompt = "disconnected >"
-        elif context:
-            prompt = "%s:%s %s > " % (self.conn.host, self.conn.port, context)
-        else:
-            prompt = "%s:%s > " % (self.conn.host, self.conn.port)
-        self.prompt = colorize(prompt, Colors.Green)
-
-
-class UpdateCmd(PlexCmd):
-    ''' Mixin that adds allows the user to trigger the updating process '''
-
-    def do_update(self, s):
-        print "Updating plugins"
-        get(self.conn, "/system/appstore/updates/install", "Updating failed: ")
-
-
-class PluginCmd(PlexCmd):
-    ''' Mixin that adds plugin related commands '''
-
-    def restart_plugin(self, plugin):
-        print "Restarting plugin: %s" % plugin
-        url = "/:/plugins/%s/restart" % plugin
-        if get(self.conn, url, "Failed to restart plugin: ") is not None:
-            print "Restart succeeded"
-
-    def parse_plugins_response(self, response):
-        result = list()
-        listing = etree.fromstring(response)
-        for plugin_node in listing.findall(".//Plugin"):
-            identifier = plugin_node.get("identifier")
-            result.append(Plugin(identifier))
-        return result
-
-    def get_plugins(self, error_msg = None):
-        response = get(self.conn, "/:/plugins/", error_msg)
-        if not response:
-            return None
-        return self.parse_plugins_response(response)
-
-    def help_restart(self):
-        print 'Usage: restart plugin_identifier'
-        print 'Restart the plugin with the given identifier'
-
-    def help_plugins(self):
-        print 'List all installed plugins'
-
-    def complete_restart(self, text, line, begidx, endidx):
-        plugins = self.get_plugins()
-        return [p.identifier for p in plugins if p.identifier.startswith(text)]
-
-    def do_plugins(self, s):
-        plugins = self.get_plugins("Couldn't retrieve plugin list")
-        for plugin in plugins:
-            print plugin
-
-    def do_restart(self, plugin_identifier):
-        if not plugin_identifier:
-            return self.help_restart()
-        plugins = self.get_plugins("Couldn't retrieve plugin list")
-        for plugin in plugins:
-            if plugin.identifier == plugin_identifier:
-                return self.restart_plugin(plugin)
-        print "Unknown plugin: %s" % plugin_identifier
-
-
-class DirectoryCmd(PlexCmd):
-    ''' Plex directory related commands '''
-
-    def __init__(self, *args, **kwargs):
-        super(DirectoryCmd, self).__init__(*args, **kwargs)
-        self.set_cwd(Directory())
-
-    def parse_directory_response(self, response, directory):
-        result = list()
-        path = directory.path if directory else ""
-        if not directory.is_root():
-            parent = Directory(directory.name, path, directory.parent, "..")
-            result.append(parent)
-        listing = etree.fromstring(response)
-        for dir_node in listing.findall(".//Directory"):
-            name = (dir_node.get("name", None)
-                    or dir_node.get('title')).encode("utf8")
-            key = dir_node.get('key').encode("utf8")
-            dir_path = key if key.startswith("/") else "%s/%s" % (path, key)
-            result.append(Directory(name, dir_path, directory))
-        for track_node in listing.findall(".//Track"):
-            name = track_node.get("title", None)
-            track_path = track_node.find(".//Media/Part").get("key")
-            result.append(Track(name, track_path))
-        for artist_node in listing.findall(".//Artist"):
-            name = artist_node.get("artist", None).encode("utf8")
-            artist_path = "%s/%s" % (path, artist_node.get("key"))
-            result.append(Artist(name, artist_path))
-        return result
-
-    def list_directory(self, directory, error_msg = None, parse = True):
-        response = get(self.conn, directory.path, error_msg)
-        if not response:
-            return None
-        return self.parse_directory_response(
-            response, directory) if parse else response
-
-    def get_node(self, directory, klass, matcher):
-        directory = directory if directory else self.cwd
-        for node in self.list_directory(directory):
-            if not isinstance(node, klass):
-                continue
-            if matcher(node):
-                return node
-
-    def get_track(self, name, cwd = None):
-        matcher = lambda n: n.name == name
-        return self.get_node(cwd, Track, matcher)
-
-    def get_directory(self, name, cwd = None):
-        matcher = lambda n: (n.display_name or n.name) == name
-        subdir = self.get_node(cwd, Directory, matcher)
-        if subdir:
-            if subdir.is_parent_dir():
-                return subdir.parent
-            return subdir
-
-    def get_cwd(self):
-        return getattr(self, "_cwd")
-
-    def set_cwd(self, cwd):
-        setattr(self, "_cwd", cwd)
-        self.prompt_context = cwd
-        self.update_prompt()
-
-    def help_cd(self):
-        print 'Change to a given directory'
-
-    def help_ls(self):
-        print 'List directory contents (defaults to current dir)'
-
-    def help_pwd(self):
-        print 'Print the path to the current directory'
-
-    def complete_cd(self, text, line, begidx, endidx):
-        components = line[3:].split("/")
-        cwd = self.cwd
-        for index, name in enumerate(components) or (0, ".."):
-            if index == len(components) - 1:
-                subdirs = self.list_directory(cwd)
-                return [s.display_name for s in subdirs
-                        if s.display_name.startswith(text)
-                        and isinstance(s, (Directory))]
-            cwd = self.get_directory(name, cwd)
-            if not cwd:
-                return []
-
-    def do_pwd(self, s):
-        print self.cwd.path or "/"
-
-    def do_cd(self, name):
-        if not len(name) or name == "/":
-            self.set_cwd(Directory())
-            return
-        for name in name.split("/"):
-            if not name:
-                continue
-            directory = self.get_directory(name)
-            if directory:
-                if not self.list_directory(directory):
-                    print "Directory not found"
-                else:
-                    self.set_cwd(directory)
-            else:
-                print "Invalid directory"
-
-    def do_ls(self, name):
-        directory = self.get_directory(name) if name else self.cwd
-        listing = self.list_directory(directory, "Couldn't list directory")
-        for subdir in listing or []:
-            print subdir
-
-    do_l = do_ls
-    cwd = property(get_cwd, set_cwd)
-
-
-class PlexShell(ExitCmd, ShellCmd, DirectoryCmd, UpdateCmd, PluginCmd):
+class PlexShell(DirectoryCmd, UpdateCmd, PluginCmd):
     ''' The command line interpretter '''
 
     def __init__(self, host, port, stdin = None):
         super(PlexShell, self).__init__(stdin = stdin)
         self.set_host(host, port)
 
-    def help_help(self):
-        print 'Print command specific help'
-
     def help_get(self):
         print 'Get a resource'
+
+    def help_edit(self):
+        print 'Edit plugin settings'
 
     def complete_get(self, text, line, begidx, endidx):
         listing = self.list_directory(self.cwd)
@@ -381,6 +46,13 @@ class PlexShell(ExitCmd, ShellCmd, DirectoryCmd, UpdateCmd, PluginCmd):
             return
         print "get: %s" % track
         get(self.conn, track.path, "Failed to get track", progress = True)
+
+    def do_edit(self, s):
+        resource = get(self.conn, self.cwd.path, "Failed to get resource")
+        if not SettingsCmd.is_settings_resource(resource):
+            print "Cannot edit non-settings resource"
+            return
+        SettingsCmd(self.conn, self.cwd, stdin = self.stdin).cmdloop()
 
 
 def main():
