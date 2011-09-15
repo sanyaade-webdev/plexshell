@@ -27,7 +27,7 @@ class PlexCmd(Cmd, object):
     def help_clear(self):
         print "Clear the screen"
 
-    def do_exit(self, s):
+    def do_exit(self, s = None):
         return True
 
     def do_shell(self, s):

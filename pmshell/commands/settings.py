@@ -2,6 +2,7 @@ from pmshell.commands import PlexCmd
 from pmshell.model import Setting
 from pmshell.utils import get, Colors, colorize
 from lxml import etree
+from urllib import quote
 
 
 class SettingsCmd(PlexCmd):
@@ -23,6 +24,13 @@ class SettingsCmd(PlexCmd):
         settings = cls.parse_settings_response(response)
         return len(settings)
 
+    def do_save(self, s):
+        to_string = lambda s: "%s=%s" % (quote(s.identifier), quote(s.value))
+        params = "&".join(map(to_string, self.settings))
+        path = self.directory.path + "/set?" + params
+        if get(self.conn, path, "Unable to save settings") is not None:
+            return self.do_exit()
+
     def do_set(self, string):
         components = string.split()
         if not len(components) >= 2:
@@ -30,6 +38,9 @@ class SettingsCmd(PlexCmd):
         identifier = components[0]
         value = " ".join(components[1:])
         self.update_setting(identifier, value)
+
+    def help_save(self):
+        print 'Save settings back to PMS'
 
     def help_set(self):
         print 'Usage: set identifier value'
