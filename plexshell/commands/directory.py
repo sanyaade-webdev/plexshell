@@ -1,6 +1,6 @@
 from lxml import etree
 from plexshell.commands import PlexCmd
-from plexshell.model import Directory, Track, Artist
+from plexshell.model import Node, Directory, Track, Artist
 from plexshell.utils import get, colorize
 
 
@@ -15,14 +15,10 @@ class DirectoryCmd(PlexCmd):
     def parse_directory_response(cls, response, directory):
         result = list()
         listing = etree.fromstring(response)
-        if not directory.is_root():
-            result.append(Directory(directory.node, directory.parent, ".."))
-        for node in listing.findall(".//Directory"):
-            result.append(Directory(node, directory))
-        for node in listing.findall(".//Track"):
-            result.append(Track(node, directory))
-        for node in listing.findall(".//Artist"):
-            result.append(Artist(node, directory))
+        if directory.backlink:
+            result.append(directory.backlink)
+        for child in listing.iterchildren():
+            result.append(Node.create(child, directory))
         return result
 
     @property

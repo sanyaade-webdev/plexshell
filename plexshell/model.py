@@ -1,6 +1,15 @@
-from utils import Colors, colorize
+from utils import Colors
 
 class Node(object):
+    @classmethod
+    def create(self, node, parent):
+        if node.tag == "Directory":
+            return Directory(node, parent)
+        elif node.tag == "Track":
+            return Track(node, parent)
+        elif node.tag == "Artist":
+            return Artist(node, parent)
+
     def __init__(self, node = None, parent = None, display_name = None):
         self._node = node
         self._parent = parent
@@ -26,40 +35,7 @@ class Node(object):
         return Colors.EndC
 
 
-class Track(Node):
-    @property
-    def name(self):
-        name = node.get("title", None)
-
-    @property
-    def path(self):
-        return self.node.find(".//Media/Part").get("key")
-
-
-class Artist(Node):
-    def __str__(self):
-        return self.name
-
-    @property
-    def name(self):
-        return self.node.get("artist", None).encode("utf8")
-
-    @property
-    def path(self):
-        parent_path = self.parent.path if self.parent else ""
-        return "%s/%s" % (parent_path, self.node.get("key"))
-
-
 class Directory(Node):
-    def is_root(self):
-        return self.name == "/"
-
-    def is_parent_dir(self):
-        return self.display_name == ".."
-
-    def is_search_dir(self):
-        return bool(self.node.get("search", 0))
-
     @property
     def path(self):
         path = ""
@@ -88,6 +64,51 @@ class Directory(Node):
     @property
     def color(self):
         return Colors.Blue
+
+    @property
+    def backlink(self):
+        if self.is_root():
+            return None
+        return Directory(self.node, self.parent, "..")
+
+    def is_root(self):
+        return self.name == "/"
+
+    def is_parent_dir(self):
+        return self.display_name == ".."
+
+    def is_search_dir(self):
+        return bool(self.node.get("search", 0))
+
+
+
+class Search(Directory):
+    pass
+
+
+class Artist(Node):
+    def __str__(self):
+        return self.name
+
+    @property
+    def name(self):
+        return self.node.get("artist", None).encode("utf8")
+
+    @property
+    def path(self):
+        parent_path = self.parent.path if self.parent else ""
+        return "%s/%s" % (parent_path, self.node.get("key"))
+
+
+class Track(Node):
+    @property
+    def name(self):
+        name = node.get("title", None)
+
+    @property
+    def path(self):
+        return self.node.find(".//Media/Part").get("key")
+
 
 
 class Plugin(object):
