@@ -8,6 +8,17 @@ from urllib import quote
 class SettingsCmd(DirectoryCmd):
     ''' Mixin that provides commands to edit user settings '''
 
+    def help_save(self):
+        print 'Save settings back to PMS'
+
+    def help_set_value(self):
+        print 'Usage: set name value'
+        print 'Change a setting value'
+
+    def help_get_value(self):
+        print 'Usage: get name'
+        print 'Print a setting value'
+
     def do_save(self, s):
         to_string = lambda s: "%s=%s" % (quote(s.identifier), quote(s.value))
         params = "&".join(map(to_string, self.settings))
@@ -23,17 +34,6 @@ class SettingsCmd(DirectoryCmd):
             self.update_setting(name, value)
         else:
             self.help_set()
-
-    def help_save(self):
-        print 'Save settings back to PMS'
-
-    def help_set_value(self):
-        print 'Usage: set name value'
-        print 'Change a setting value'
-
-    def help_get_value(self):
-        print 'Usage: get name'
-        print 'Print a setting value'
 
     def do_get_value(self, name):
         if not len(name):
