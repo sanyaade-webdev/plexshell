@@ -28,6 +28,9 @@ class PlexCmd(Cmd, object):
     def help_clear(self):
         print "Clear the screen"
 
+    def help_get(self):
+        print 'Get a resource'
+
     def do_exit(self, s = None):
         return True
 
@@ -37,8 +40,17 @@ class PlexCmd(Cmd, object):
     def do_clear(self, s):
         os.system("clear")
 
+    def do_get(self, name):
+        resource = self.get_resource(name)
+        if resource:
+            print resource
+
     def do_EOF(self, line):
         return True
+
+    def get_resource(self, name):
+        if name.startswith("/"):
+            return get(self.conn, name, "Failed to get resource")
 
     def set_host(self, host, port):
         self.conn = HTTPConnection(host, port)

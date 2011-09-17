@@ -13,9 +13,6 @@ class PlexShell(DirectoryCmd, UpdateCmd, PluginCmd):
     def help_get(self):
         print 'Get a resource'
 
-    def help_edit(self):
-        print 'Edit plugin settings'
-
     def complete_get(self, text, line, begidx, endidx):
         listing = self.list_directory(self.cwd)
         result = [node.name for node in listing
@@ -43,10 +40,3 @@ class PlexShell(DirectoryCmd, UpdateCmd, PluginCmd):
             return
         print "get: %s" % track
         get(self.conn, track.path, "Failed to get track", progress = True)
-
-    def do_edit(self, s):
-        resource = get(self.conn, self.cwd.path, "Failed to get resource")
-        if not SettingsCmd.is_settings_resource(resource):
-            print "Cannot edit non-settings resource"
-            return
-        SettingsCmd(self.conn, self.cwd, stdin = self.stdin).cmdloop()

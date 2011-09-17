@@ -1,6 +1,7 @@
 from lxml import etree
 from plexshell.commands import PlexCmd
-from plexshell.model import Node, Directory, Track, Artist
+from plexshell.model import Node, Directory, SettingsDirectory
+from plexshell.model import Track, Artist, Search
 from plexshell.utils import get, colorize
 
 
@@ -13,13 +14,8 @@ class DirectoryCmd(PlexCmd):
 
     @classmethod
     def parse_directory_response(cls, response, directory):
-        result = list()
-        listing = etree.fromstring(response)
-        if directory.backlink:
-            result.append(directory.backlink)
-        for child in listing.iterchildren():
-            result.append(Node.create(child, directory))
-        return result
+        create_node = lambda child: Node.create(child, directory)
+        return map(create_node, etree.fromstring(response))
 
     @property
     def cwd(self):
@@ -33,16 +29,17 @@ class DirectoryCmd(PlexCmd):
 
     def list_directory(self, directory, error_msg = None, parse = True):
         response = get(self.conn, directory.path, error_msg)
-        return self.parse_directory_response(
-            response, directory) if response and parse else response
+        if not response or not parse:
+            return response
+        contents = self.parse_directory_response(response, directory)
+        if directory.backlink:
+            contents.insert(0, directory.backlink)
+        return contents
 
-    def get_node(self, directory, klass, matcher):
-        directory = directory if directory else self.cwd
-        for node in self.list_directory(directory):
-            if not isinstance(node, klass):
-                continue
-            if matcher(node):
-                return node
+    def get_node(self, directory, klass, predicate):
+        items = self.list_directory(directory or self.cwd)
+        test = lambda i: isinstance(i, klass) and predicate(i)
+        return next((i for i in items if test(i)), None)
 
     def get_track(self, name, cwd = None):
         matcher = lambda n: n.name == name
@@ -55,6 +52,11 @@ class DirectoryCmd(PlexCmd):
             if subdir.is_parent_dir():
                 return subdir.parent
             return subdir
+
+    def get_resource(self, name):
+        if not name:
+            return self.list_directory(self.cwd, parse = False)
+        return super(DirectoryCmd, self).get_resource(name)
 
     def help_cd(self):
         print 'Change to a given directory'
@@ -84,24 +86,39 @@ class DirectoryCmd(PlexCmd):
     def do_cd(self, name):
         if not len(name) or name == "/":
             self.cwd = Directory()
-            return
         for name in name.split("/"):
             if not self.cd_to_sibling(name):
                 return
 
+    def complete_get(self, text, line, begidx, endidx):
+        listing = self.list_directory(self.cwd)
+        result = [node.name for node in listing
+                  if node.name.startswith(text)
+                  and isinstance(node, Track)]
+        path = line.replace("get ", "")
+        if not path:
+            return [self.cwd.path]
+        return [node.path.split("/")[-1]
+                for node in listing if
+                node.path.startswith(path)]
+
     def cd_to_sibling(self, name):
+        from .settings import SettingsCmd
         if not name:
-            return True
+            return
+        original_directory = self.cwd
         directory = self.get_directory(name)
         if not directory:
             print "Invalid directory"
-        elif directory.is_search_dir():
+        elif isinstance(directory, Search):
             print "NOT IMPLEMENTED: search command"
+        elif isinstance(directory, SettingsDirectory):
+            SettingsCmd(self.conn, directory, stdin = self.stdin).cmdloop()
         elif not self.list_directory(directory):
             print "Directory not found: %s" % directory
         else:
             self.cwd = directory
-        return self.cwd.name == name
+        return original_directory != directory
 
     def do_ls(self, name):
         directory = self.get_directory(name) if name else self.cwd

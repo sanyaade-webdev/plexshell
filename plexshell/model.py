@@ -1,14 +1,21 @@
 from utils import Colors
+from lxml import etree
 
 class Node(object):
     @classmethod
     def create(self, node, parent):
         if node.tag == "Directory":
+            if bool(node.get("search", 0)):
+                return Search(node, parent)
+            elif bool(node.get("settings", 0)):
+                return SettingsDirectory(node, parent)
             return Directory(node, parent)
         elif node.tag == "Track":
             return Track(node, parent)
         elif node.tag == "Artist":
             return Artist(node, parent)
+        elif node.tag == "Setting":
+            return Setting(node, parent)
 
     def __init__(self, node = None, parent = None, display_name = None):
         self._node = node
@@ -81,7 +88,6 @@ class Directory(Node):
         return bool(self.node.get("search", 0))
 
 
-
 class Search(Directory):
     pass
 
@@ -119,12 +125,27 @@ class Plugin(object):
         return self.identifier
 
 
-class Setting(object):
-    def __init__(self, identifier, label, value):
-        self.identifier = identifier
-        self.label = label
-        self.value = value
+class SettingsDirectory(Directory):
+    @property
+    def color(self):
+        return Colors.Red
+
+
+class Setting(Node):
+    def __init__(self, node, parent):
+        super(Setting, self).__init__(node, parent)
+        self.identifier = node.get("id")
+        self.label = node.get("label")
+        self.value = node.get("value")
 
     def __str__(self):
         return "<setting id: '%s', label: '%s', value: '%s'>" % (
             self.identifier, self.label, self.value)
+
+    @property
+    def name(self):
+        return self.label
+
+    @property
+    def color(self):
+        return Colors.Red
