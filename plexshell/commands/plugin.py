@@ -1,6 +1,7 @@
 from lxml import etree
 from plexshell.commands import PlexCmd
 from plexshell.model import Plugin
+from plexshell.utils import get
 
 
 class PluginCmd(PlexCmd):

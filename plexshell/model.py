@@ -98,10 +98,10 @@ class SearchDirectory(Directory):
 
 
 class Search(Directory):
-    def __init__(self, node, parent, term, path):
-        super(Search, self).__init__(node, parent.parent, term)
+    def __init__(self, node, parent, term, search_type, path):
+        super(Search, self).__init__(node, parent, term)
         self.term = term
-        self.search_type = parent.name
+        self.search_type = search_type
         self.search_path = path
 
     @property

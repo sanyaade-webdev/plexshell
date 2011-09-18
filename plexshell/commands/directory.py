@@ -4,6 +4,7 @@ from plexshell.model import Node, Directory, SettingsDirectory
 from plexshell.model import Track, Artist, SearchDirectory, Search
 from plexshell.utils import PlexError, get, colorize
 from urllib import quote
+import re
 
 
 class DirectoryCmd(PlexCmd):
@@ -14,13 +15,28 @@ class DirectoryCmd(PlexCmd):
         self.cwd = cwd
 
     @classmethod
+    def is_error_message(cls, node):
+        return node.get("message", False)
+
+    @classmethod
+    def get_error_message(cls, node):
+        return "%s: %s" % (node.get("header"), node.get("message"))
+
+    @classmethod
+    def check_error(cls, node):
+        if node is not None and cls.is_error_message(node):
+            raise PlexError(cls.get_error_message(node))
+
+    @classmethod
+    def parse_response(cls, response):
+        node = etree.fromstring(response)
+        cls.check_error(node)
+        return node
+
+    @classmethod
     def parse_directory_response(cls, response, directory):
-        root = etree.fromstring(response)
-        if root.get("message"):
-            error = "%s: %s" % (root.get("header"), root.get("message"))
-            raise PlexError(error)
         create_node = lambda child: Node.create(child, directory)
-        return map(create_node, root)
+        return map(create_node, cls.parse_response(response))
 
     @property
     def cwd(self):
@@ -147,8 +163,14 @@ class SearchCmd(DirectoryCmd):
     def do_search(self, term):
         path = self.cwd.path + "&query=%s" % quote(term)
         response = get(self.conn, path, "Search failed")
-        self.cwd = Search(etree.fromstring(response), self.cwd, term, path)
+        search_type = self.cwd.name
+        self.cwd = self.cwd.parent # if parsing fails jump back to the parent
+        self.cwd = Search(
+            self.parse_response(response), self.cwd, term, search_type, path)
 
     def onecmd(self, line):
-        self.do_search(line)
+        try:
+            self.do_search(line)
+        except PlexError, e:
+            print e
         return True
