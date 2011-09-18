@@ -3,8 +3,6 @@ from plexshell.commands import PlexCmd
 from plexshell.model import Node, Directory, SettingsDirectory
 from plexshell.model import Track, Artist, SearchDirectory, Search
 from plexshell.utils import PlexError, get, colorize
-from urllib import quote
-import re
 
 
 class DirectoryCmd(PlexCmd):
@@ -124,6 +122,7 @@ class DirectoryCmd(PlexCmd):
                 node.path.startswith(path)]
 
     def cd_to_search(self, search_directory):
+        from .search import SearchCmd
         search = SearchCmd(self.conn, search_directory, stdin = self.stdin)
         search.cmdloop()
         self.cwd = search.cwd
@@ -155,23 +154,3 @@ class DirectoryCmd(PlexCmd):
     do_l = do_ls
 
 
-class SearchCmd(DirectoryCmd):
-    def __init__(self, *args, **kwargs):
-        super(SearchCmd, self).__init__(*args, **kwargs)
-        if self.is_interactive():
-            self.prompt = "Enter search term: "
-
-    def do_search(self, term):
-        path = self.cwd.path + "&query=%s" % quote(term)
-        response = get(self.conn, path, "Search failed")
-        search_type = self.cwd.name
-        self.cwd = self.cwd.parent # if parsing fails jump back to the parent
-        self.cwd = Search(
-            self.parse_response(response), self.cwd, term, search_type, path)
-
-    def onecmd(self, line):
-        try:
-            self.do_search(line)
-        except PlexError, e:
-            print e
-        return True
