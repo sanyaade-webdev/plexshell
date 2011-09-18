@@ -48,6 +48,15 @@ class PlexCmd(Cmd, object):
     def do_EOF(self, line):
         return True
 
+    def default(self, line):
+        if line.startswith("#"):
+            return False
+        super(PlexCmd, self).default(line)
+        return not self.is_interactive()
+
+    def is_interactive(self):
+        return self.use_rawinput
+
     def get_resource(self, name):
         if name.startswith("/"):
             return get(self.conn, name, "Failed to get resource")

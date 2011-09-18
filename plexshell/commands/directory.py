@@ -158,7 +158,7 @@ class DirectoryCmd(PlexCmd):
 class SearchCmd(DirectoryCmd):
     def __init__(self, *args, **kwargs):
         super(SearchCmd, self).__init__(*args, **kwargs)
-        if 'stdin' not in kwargs:
+        if self.is_interactive():
             self.prompt = "Enter search term: "
 
     def do_search(self, term):
