@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from plexshell import PlexShell
 import argparse
 import os
@@ -19,7 +18,7 @@ def main():
         type = int,
         default = 32400)
     parser.add_argument(
-        "-s", "--script",
+        "script",
         metavar = "scriptpath",
         nargs = "?",
         default = None)
