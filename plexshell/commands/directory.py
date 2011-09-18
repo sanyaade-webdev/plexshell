@@ -158,7 +158,8 @@ class DirectoryCmd(PlexCmd):
 class SearchCmd(DirectoryCmd):
     def __init__(self, *args, **kwargs):
         super(SearchCmd, self).__init__(*args, **kwargs)
-        self.prompt = "Enter search term: "
+        if 'stdin' not in kwargs:
+            self.prompt = "Enter search term: "
 
     def do_search(self, term):
         path = self.cwd.path + "&query=%s" % quote(term)
