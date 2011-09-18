@@ -14,8 +14,12 @@ class DirectoryCmd(PlexCmd):
 
     @classmethod
     def parse_directory_response(cls, response, directory):
+        root = etree.fromstring(response)
+        if root.get("message"):
+            error = "%s: %s" % (root.get("header"), root.get("message"))
+            raise PlexError(error)
         create_node = lambda child: Node.create(child, directory)
-        return map(create_node, etree.fromstring(response))
+        return map(create_node, root)
 
     @property
     def cwd(self):

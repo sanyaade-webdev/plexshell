@@ -2,6 +2,11 @@ from httplib import MOVED_PERMANENTLY, OK
 import sys
 
 
+class PlexError(Exception):
+    ''' Exception raised when a server error is detected '''
+    pass
+
+
 class Colors:
     Blue = '\033[94m'
     Green = '\033[92m'

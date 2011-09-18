@@ -1,6 +1,6 @@
 from cmd import Cmd
 from httplib import HTTPConnection
-from plexshell.utils import Colors, colorize
+from plexshell.utils import PlexError, Colors, colorize
 import os
 import sys
 
@@ -73,6 +73,8 @@ class PlexCmd(Cmd, object):
         while True:
             try:
                 return super(PlexCmd, self).cmdloop(intro)
+            except PlexError, e:
+                print e
             except KeyboardInterrupt:
                 print "Goodbye!"
                 exit(1)
