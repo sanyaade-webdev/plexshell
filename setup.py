@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'plexshell',
-    version = '0.0.1',
+    version = '0.0.2',
     description = 'A shell to interact with the Plex Media Server',
     author = 'Jamie Kirkpatrick',
     author_email = 'jamie@plexinc.com',
