@@ -68,9 +68,8 @@ class SettingsCmd(DirectoryCmd):
             print "Invalid setting: %s" % name
 
     def __init__(self, conn, directory, stdin = None):
-        super(SettingsCmd, self).__init__(stdin = stdin)
+        super(SettingsCmd, self).__init__(conn, stdin = stdin)
         self.cwd = directory
-        self.conn = conn
         self.directory = directory
         self.settings = [s for s in self.list_directory(directory)
                          if isinstance(s, Setting)]

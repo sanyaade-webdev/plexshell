@@ -1,16 +1,17 @@
 from lxml import etree
 from plexshell.commands import PlexCmd
 from plexshell.model import Node, Directory, SettingsDirectory
-from plexshell.model import Track, Artist, Search
-from plexshell.utils import get, colorize
+from plexshell.model import Track, Artist, SearchDirectory, Search
+from plexshell.utils import PlexError, get, colorize
+from urllib import quote
 
 
 class DirectoryCmd(PlexCmd):
     ''' Plex directory related commands '''
 
-    def __init__(self, *args, **kwargs):
-        super(DirectoryCmd, self).__init__(*args, **kwargs)
-        self.cwd = Directory()
+    def __init__(self, conn = None, cwd = Directory(), *args, **kwargs):
+        super(DirectoryCmd, self).__init__(conn, *args, **kwargs)
+        self.cwd = cwd
 
     @classmethod
     def parse_directory_response(cls, response, directory):
@@ -106,6 +107,11 @@ class DirectoryCmd(PlexCmd):
                 for node in listing if
                 node.path.startswith(path)]
 
+    def cd_to_search(self, search_directory):
+        search = SearchCmd(self.conn, search_directory, stdin = self.stdin)
+        search.cmdloop()
+        self.cwd = search.cwd
+
     def cd_to_sibling(self, name):
         from .settings import SettingsCmd
         if not name:
@@ -114,8 +120,8 @@ class DirectoryCmd(PlexCmd):
         directory = self.get_directory(name)
         if not directory:
             print "Invalid directory"
-        elif isinstance(directory, Search):
-            print "NOT IMPLEMENTED: search command"
+        elif isinstance(directory, SearchDirectory):
+            self.cd_to_search(directory)
         elif isinstance(directory, SettingsDirectory):
             SettingsCmd(self.conn, directory, stdin = self.stdin).cmdloop()
         elif not self.list_directory(directory):
@@ -131,3 +137,18 @@ class DirectoryCmd(PlexCmd):
             print colorize(subdir.display_name, subdir.color)
 
     do_l = do_ls
+
+
+class SearchCmd(DirectoryCmd):
+    def __init__(self, *args, **kwargs):
+        super(SearchCmd, self).__init__(*args, **kwargs)
+        self.prompt = "Enter search term: "
+
+    def do_search(self, term):
+        path = self.cwd.path + "&query=%s" % quote(term)
+        response = get(self.conn, path, "Search failed")
+        self.cwd = Search(etree.fromstring(response), self.cwd, term, path)
+
+    def onecmd(self, line):
+        self.do_search(line)
+        return True

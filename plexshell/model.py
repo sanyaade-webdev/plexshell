@@ -1,12 +1,14 @@
 from utils import Colors
 from lxml import etree
+import re
+
 
 class Node(object):
     @classmethod
     def create(self, node, parent):
         if node.tag == "Directory":
             if bool(node.get("search", 0)):
-                return Search(node, parent)
+                return SearchDirectory(node, parent)
             elif bool(node.get("settings", 0)):
                 return SettingsDirectory(node, parent)
             return Directory(node, parent)
@@ -88,8 +90,32 @@ class Directory(Node):
         return bool(self.node.get("search", 0))
 
 
+class SearchDirectory(Directory):
+    @property
+    def name(self):
+        name = super(SearchDirectory, self).name
+        return re.sub("^Search ", "", name)
+
+
 class Search(Directory):
-    pass
+    def __init__(self, node, parent, term, path):
+        super(Search, self).__init__(node, parent.parent, term)
+        self.term = term
+        self.search_type = parent.name
+        self.search_path = path
+
+    @property
+    def name(self):
+        return self.term
+
+    @property
+    def path(self):
+        return self.search_path
+
+    @property
+    def display_path(self):
+        return "%s/%s/%s" % (
+            self.parent.display_path, self.search_type, self.name)
 
 
 class Artist(Node):
@@ -109,7 +135,7 @@ class Artist(Node):
 class Track(Node):
     @property
     def name(self):
-        name = node.get("title", None)
+        return self.node.get("title", None)
 
     @property
     def path(self):

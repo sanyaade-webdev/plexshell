@@ -8,12 +8,12 @@ import sys
 class PlexCmd(Cmd, object):
     ''' Base class for plex commands '''
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, conn = None, *args, **kwargs):
         if kwargs.get('stdin', None) and kwargs['stdin'] != sys.stdin:
             setattr(self, "interactive", False)
             self.use_rawinput = False
         super(PlexCmd, self).__init__(*args, **kwargs)
-        self.conn = None
+        self.conn = conn
 
     def help_help(self):
         print 'Print command specific help'
