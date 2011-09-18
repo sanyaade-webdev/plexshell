@@ -72,10 +72,10 @@ class DirectoryCmd(PlexCmd):
                 return subdir.parent
             return subdir
 
-    def get_resource(self, name):
+    def get_resource(self, name, error = None):
         if not name:
             return self.list_directory(self.cwd, parse = False)
-        return super(DirectoryCmd, self).get_resource(name)
+        return super(DirectoryCmd, self).get_resource(name, error)
 
     def help_cd(self):
         print 'Change to a given directory'

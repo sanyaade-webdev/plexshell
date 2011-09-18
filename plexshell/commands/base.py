@@ -1,6 +1,6 @@
 from cmd import Cmd
 from httplib import HTTPConnection
-from plexshell.utils import PlexError, Colors, colorize
+from plexshell.utils import PlexError, Colors, colorize, get
 import os
 import sys
 
@@ -57,9 +57,9 @@ class PlexCmd(Cmd, object):
     def is_interactive(self):
         return self.use_rawinput
 
-    def get_resource(self, name):
+    def get_resource(self, name, error = None):
         if name.startswith("/"):
-            return get(self.conn, name, "Failed to get resource")
+            return get(self.conn, name, error or "Failed to get resource")
 
     def set_host(self, host, port):
         self.conn = HTTPConnection(host, port)

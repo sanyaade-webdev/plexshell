@@ -1,6 +1,6 @@
 from .directory import DirectoryCmd
 from plexshell.model import Search
-from plexshell.utils import PlexError, get
+from plexshell.utils import PlexError
 from urllib import quote
 
 
@@ -12,7 +12,7 @@ class SearchCmd(DirectoryCmd):
 
     def do_search(self, term):
         path = self.cwd.path + "&query=%s" % quote(term)
-        response = get(self.conn, path, "Search failed")
+        response = self.get_resource(path, "Search failed")
         search_type = self.cwd.name
         self.cwd = self.cwd.parent # if parsing fails jump back to the parent
         self.cwd = Search(
