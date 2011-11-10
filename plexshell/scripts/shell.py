@@ -1,6 +1,20 @@
 from plexshell import PlexShell
+from socket import error as SocketError
 import argparse
 import os
+
+
+def shell_loop(args, stdin):
+    should_exit = False
+    while not should_exit:
+        try:
+            client = PlexShell(args.host, args.port, stdin = stdin)
+            client.cmdloop()
+            should_exit = True
+        except KeyboardInterrupt:
+            should_exit = True
+        except SocketError, e:
+            print e
 
 
 def main():
@@ -29,8 +43,7 @@ def main():
             print "Script does not exist: %s" % args.script
             exit(1)
         stdin = open(args.script)
-    client = PlexShell(args.host, args.port, stdin = stdin)
-    client.cmdloop()
+    shell_loop(args, stdin)
 
 
 if __name__ == "__main__":
